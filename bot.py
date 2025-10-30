@@ -594,7 +594,7 @@ class SayModal(Modal):
         await interaction.response.send_message(
             embed=discord.Embed(
                 title="✅ Message Sent",
-                description="Your message has been sent!",
+                description="Your message has been sent anonymously!",
                 color=discord.Color.green()
             ).set_footer(text="Bypass Bot"),
             ephemeral=True
@@ -647,7 +647,6 @@ class EmbedModal(Modal):
             description=description,
             color=color
         )
-        embed.set_footer(text=f"Created by {interaction.user.name}")
         
         await interaction.response.send_message(
             embed=discord.Embed(
@@ -1010,7 +1009,7 @@ async def info_command(interaction: discord.Interaction):
     
     embed.add_field(
         name="⚙️ Admin Commands",
-        value="`/say` - Make bot say a message\n`/embed` - Create custom embeds\n`/panel` - Create bypass panel\n`/autobypass` - Enable auto-bypass\n`/disableautobypass` - Disable auto-bypass",
+        value="`/say` - Make bot say a message\n`/embed` - Create custom embeds\n`/panel` - Create bypass panel\n`/autobypass` - Enable auto-bypass\n`/disableautobypass` - Disable auto-bypass\n`/purge` - Delete messages\n`/ban` - Ban a user\n`/timeout` - Timeout a user",
         inline=False
     )
     
@@ -1431,6 +1430,252 @@ class DMModal(Modal):
                     ).set_footer(text="Bypass Bot"),
                     ephemeral=True
                 )
+
+@bot.tree.command(name="purge", description="[ADMIN] Delete a specified number of messages")
+@app_commands.describe(amount="Number of messages to delete (1-100)")
+async def purge_command(interaction: discord.Interaction, amount: int):
+    if not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Denied",
+                description="You need **Manage Messages** permission to use this command.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    if amount < 1 or amount > 100:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Amount",
+                description="Please specify a number between 1 and 100.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        deleted = await interaction.channel.purge(limit=amount)
+        
+        await interaction.followup.send(
+            embed=discord.Embed(
+                title="✅ Messages Purged",
+                description=f"Successfully deleted **{len(deleted)}** message(s)!",
+                color=discord.Color.green()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+    except discord.Forbidden:
+        await interaction.followup.send(
+            embed=discord.Embed(
+                title="❌ Permission Error",
+                description="I don't have permission to delete messages in this channel.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.followup.send(
+            embed=discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred: {str(e)[:200]}",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+
+@bot.tree.command(name="ban", description="[ADMIN] Ban a user from the server")
+@app_commands.describe(
+    user="The user to ban",
+    reason="Reason for the ban (optional)"
+)
+async def ban_command(interaction: discord.Interaction, user: discord.Member, reason: Optional[str] = None):
+    if not interaction.user.guild_permissions.ban_members:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Denied",
+                description="You need **Ban Members** permission to use this command.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    if user.id == interaction.user.id:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Action",
+                description="You cannot ban yourself!",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    if user.top_role >= interaction.user.top_role:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Denied",
+                description="You cannot ban this user as they have an equal or higher role than you.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    ban_reason = reason or "No reason provided"
+    
+    try:
+        await user.ban(reason=f"Banned by {interaction.user.name} - {ban_reason}")
+        
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="✅ User Banned",
+                description=f"**User:** {user.mention} ({user.name})\n**Reason:** {ban_reason}\n**Banned by:** {interaction.user.mention}",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        
+        try:
+            await user.send(
+                embed=discord.Embed(
+                    title="🚫 You Have Been Banned",
+                    description=f"You have been banned from **{interaction.guild.name}**.\n\n**Reason:** {ban_reason}",
+                    color=discord.Color.red()
+                ).set_footer(text="Bypass Bot")
+            )
+        except:
+            pass
+            
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Error",
+                description="I don't have permission to ban this user.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred: {str(e)[:200]}",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+
+@bot.tree.command(name="timeout", description="[ADMIN] Timeout a user for a specified duration")
+@app_commands.describe(
+    user="The user to timeout",
+    duration="Duration in minutes (1-40320, max 28 days)",
+    reason="Reason for the timeout (optional)"
+)
+async def timeout_command(interaction: discord.Interaction, user: discord.Member, duration: int, reason: Optional[str] = None):
+    if not interaction.user.guild_permissions.moderate_members:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Denied",
+                description="You need **Moderate Members** permission to use this command.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    if user.id == interaction.user.id:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Action",
+                description="You cannot timeout yourself!",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    if user.top_role >= interaction.user.top_role:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Denied",
+                description="You cannot timeout this user as they have an equal or higher role than you.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    if duration < 1 or duration > 40320:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Duration",
+                description="Duration must be between 1 minute and 40,320 minutes (28 days).",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
+    timeout_reason = reason or "No reason provided"
+    timeout_duration = timedelta(minutes=duration)
+    
+    try:
+        await user.timeout(timeout_duration, reason=f"Timed out by {interaction.user.name} - {timeout_reason}")
+        
+        duration_text = f"{duration} minute(s)"
+        if duration >= 1440:
+            days = duration // 1440
+            remaining_mins = duration % 1440
+            duration_text = f"{days} day(s)" + (f" {remaining_mins} minute(s)" if remaining_mins > 0 else "")
+        elif duration >= 60:
+            hours = duration // 60
+            remaining_mins = duration % 60
+            duration_text = f"{hours} hour(s)" + (f" {remaining_mins} minute(s)" if remaining_mins > 0 else "")
+        
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="✅ User Timed Out",
+                description=f"**User:** {user.mention} ({user.name})\n**Duration:** {duration_text}\n**Reason:** {timeout_reason}\n**By:** {interaction.user.mention}",
+                color=discord.Color.orange()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        
+        try:
+            await user.send(
+                embed=discord.Embed(
+                    title="⏸️ You Have Been Timed Out",
+                    description=f"You have been timed out in **{interaction.guild.name}**.\n\n**Duration:** {duration_text}\n**Reason:** {timeout_reason}",
+                    color=discord.Color.orange()
+                ).set_footer(text="Bypass Bot")
+            )
+        except:
+            pass
+            
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Error",
+                description="I don't have permission to timeout this user.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred: {str(e)[:200]}",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
 
 @bot.tree.command(name="dm", description="[OWNER] Send a DM to a user or broadcast to everyone")
 @app_commands.describe(
