@@ -1308,6 +1308,170 @@ async def blacklist_command(
                 ephemeral=True
             )
 
+class DMModal(Modal):
+    message_input = TextInput(
+        label='Message',
+        placeholder='Enter your message',
+        required=True,
+        style=discord.TextStyle.paragraph,
+        max_length=2000
+    )
+
+    def __init__(self, target_user: Optional[discord.User] = None, broadcast: bool = False, guild: Optional[discord.Guild] = None):
+        self.target_user = target_user
+        self.broadcast = broadcast
+        self.guild = guild
+        title = "📢 Broadcast Message" if broadcast else f"💬 DM to {target_user.name if target_user else 'User'}"
+        super().__init__(title=title)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        message_content = self.message_input.value
+        
+        if self.broadcast and self.guild:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="⏳ Broadcasting...",
+                    description=f"Sending message to all {self.guild.member_count} members...",
+                    color=discord.Color.blue()
+                ).set_footer(text="This may take a while"),
+                ephemeral=True
+            )
+            
+            success_count = 0
+            failed_count = 0
+            
+            for member in self.guild.members:
+                if member.bot:
+                    continue
+                
+                try:
+                    dm_embed = discord.Embed(
+                        title="📢 Broadcast Message",
+                        description=message_content,
+                        color=discord.Color.blue()
+                    )
+                    dm_embed.set_footer(text=f"From {self.guild.name} | Sent by Bot Owner")
+                    await member.send(embed=dm_embed)
+                    success_count += 1
+                    await asyncio.sleep(1)
+                except discord.Forbidden:
+                    failed_count += 1
+                except Exception as e:
+                    failed_count += 1
+            
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title="✅ Broadcast Complete",
+                    description=f"**Successfully sent:** {success_count}\n**Failed:** {failed_count}\n\n**Message:**\n{message_content[:200]}",
+                    color=discord.Color.green()
+                ).set_footer(text="Bypass Bot")
+            )
+        
+        elif self.target_user:
+            try:
+                dm_embed = discord.Embed(
+                    title="💬 Direct Message",
+                    description=message_content,
+                    color=discord.Color.blue()
+                )
+                dm_embed.set_footer(text="From Bot Owner")
+                await self.target_user.send(embed=dm_embed)
+                
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        title="✅ DM Sent",
+                        description=f"Message successfully sent to {self.target_user.mention}!\n\n**Message:**\n{message_content[:200]}",
+                        color=discord.Color.green()
+                    ).set_footer(text="Bypass Bot"),
+                    ephemeral=True
+                )
+            except discord.Forbidden:
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        title="❌ DM Failed",
+                        description=f"Could not send DM to {self.target_user.mention}. They may have DMs disabled.",
+                        color=discord.Color.red()
+                    ).set_footer(text="Bypass Bot"),
+                    ephemeral=True
+                )
+            except Exception as e:
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        title="❌ Error",
+                        description=f"An error occurred: {str(e)[:200]}",
+                        color=discord.Color.red()
+                    ).set_footer(text="Bypass Bot"),
+                    ephemeral=True
+                )
+
+@bot.tree.command(name="dm", description="[OWNER] Send a DM to a user or broadcast to everyone")
+@app_commands.describe(
+    mode="Choose 'user' to DM one person or 'broadcast' to DM everyone",
+    user="The user to send a DM to (only for 'user' mode)"
+)
+async def dm_command(
+    interaction: discord.Interaction,
+    mode: str,
+    user: Optional[discord.User] = None
+):
+    if interaction.user.id != BOT_OWNER_ID:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Access Denied",
+                description="This command is only available to the bot owner.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+        return
+    
+    mode = mode.lower()
+    
+    if mode == "user":
+        if not user:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Missing User",
+                    description="Please specify a user to send a DM to.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.send_modal(DMModal(target_user=user))
+    
+    elif mode == "broadcast":
+        if not interaction.guild:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Server Only",
+                    description="Broadcast mode can only be used in a server.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
+            )
+            return
+        
+        confirm_embed = discord.Embed(
+            title="⚠️ Confirm Broadcast",
+            description=f"You are about to send a DM to **{interaction.guild.member_count}** members in **{interaction.guild.name}**.\n\nThis action cannot be undone and may take several minutes.\n\nAre you sure you want to continue?",
+            color=discord.Color.orange()
+        )
+        confirm_embed.set_footer(text="Broadcast will send to all non-bot members")
+        
+        await interaction.response.send_modal(DMModal(broadcast=True, guild=interaction.guild))
+    
+    else:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Invalid Mode",
+                description="Please choose either 'user' or 'broadcast' mode.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
