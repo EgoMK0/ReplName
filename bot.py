@@ -937,12 +937,34 @@ async def on_ready():
 async def bypass_command(interaction: discord.Interaction):
     await interaction.response.send_modal(BypassModal())
 
-@bot.tree.command(name="say", description="Make the bot say a message")
+@bot.tree.command(name="say", description="[ADMIN] Make the bot say a message")
 async def say_command(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Denied",
+                description="You need **Administrator** permissions to use this command.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
     await interaction.response.send_modal(SayModal())
 
-@bot.tree.command(name="embed", description="Create a custom embed message")
+@bot.tree.command(name="embed", description="[ADMIN] Create a custom embed message")
 async def embed_command(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Permission Denied",
+                description="You need **Administrator** permissions to use this command.",
+                color=discord.Color.red()
+            ).set_footer(text="Bypass Bot"),
+            ephemeral=True
+        )
+        return
+    
     await interaction.response.send_modal(EmbedModal())
 
 @bot.tree.command(name="config", description="[ADMIN] Configure bot API keys")
@@ -981,8 +1003,14 @@ async def info_command(interaction: discord.Interaction):
     )
     
     embed.add_field(
-        name="🔧 Commands",
-        value="`/bypass` - Bypass a link\n`/supported` - View supported services\n`/stats` - View bot statistics\n`/autobypass` - Enable auto-bypass\n`/disableautobypass` - Disable auto-bypass",
+        name="🔧 User Commands",
+        value="`/bypass` - Bypass a link\n`/info` - Bot information\n`/supported` - View supported services\n`/stats` - View bot statistics",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="⚙️ Admin Commands",
+        value="`/say` - Make bot say a message\n`/embed` - Create custom embeds\n`/panel` - Create bypass panel\n`/autobypass` - Enable auto-bypass\n`/disableautobypass` - Disable auto-bypass",
         inline=False
     )
     
